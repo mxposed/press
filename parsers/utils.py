@@ -6,6 +6,9 @@ def inspect(node, name=None, num='N', indent=0):
     if hasattr(node, 'value'):
         val = node.value
         children = 0
+    elif hasattr(node, 'subject'):
+        val = 'call {}: {}'.format(node.subject, node.args)
+        children = 0
     elif hasattr(node, 'text'):
         val = node.text
         children = len(node.elements)

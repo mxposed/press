@@ -2,9 +2,9 @@ grammar template
 
 document            <- template
 
-template            <- text_ (insertion text_)*
+template            <- text_ texts:(insertion text_)*  %make_template
 
-inner_template      <- inner_text (insertion inner_text)*
+inner_template      <- inner_text texts:(insertion inner_text)*  %make_template
 
 text_               <- (!"[" .)*
 
@@ -12,11 +12,11 @@ inner_text          <- (!("[" / "]") .)*
 
 insertion           <- "[" statements "]"
 
-statements          <- _* (expr (expr_end _* expr)*)? _*
+statements          <- _* (expr exprs:(expr_end _* expr)*)? _*  %make_statements
 
 expr_end            <- _* ";" / "\n"
 
-expr                <- assignment_expr / function_expr / call_expr / value
+expr                <- value / assignment_expr / function_expr / call_expr
 
 assignment_expr     <- name _* "=" _* expr
 
@@ -24,9 +24,9 @@ function_expr       <- "function" _* "(" function_args? ")" _* "{" statements "}
 
 function_args       <- _* name _* ("," _* name _*)*
 
-call_expr           <- name ("(" call_args? ")" / " "+ expr / bracket_args)?
+call_expr           <- name arg:("(" args:call_args? ")" / " "+ expr / bracket_args)?  %make_call
 
-call_args           <- _* expr _* ("," _* expr _*)*
+call_args           <- _* expr _* exprs:("," _* expr _*)*
 
 bracket_args        <- bracket_arg*
 
@@ -34,15 +34,15 @@ bracket_arg         <- "[" inner_template "]" [\s]*
 
 value               <- string / number / boolean / null
 
-string              <- '"' ("\\" . / [^"])* '"' / "'" ("\\" . / [^'])* "'"
+string              <- '"' ("\\" . / [^"])* '"'  %make_string / "'" ("\\" . / [^'])* "'"  %make_string
 
-number              <- "-"? ("0" / [1-9] [0-9]*) ("." [0-9]+)? (("e" / "E") ("+" / "-" / "") [0-9]+)?
+number              <- ("0" / [1-9] [0-9]*) ("." [0-9]+)? (("e" / "E") ("+" / "-" / "") [0-9]+)?  %make_number
 
-boolean             <- "true" / "false"
+boolean             <- "true"  %make_boolean / "false"  %make_boolean
 
-null                <- "null"
+null                <- "null"  %make_none
 
-name                <- [a-zA-Z_] [a-zA-Z0-9_]*
+name                <- [a-zA-Z_] [a-zA-Z0-9_]*  %make_name
 
 _                   <-  [\s] / comment
 

@@ -2,7 +2,7 @@ grammar press
 
 document            <- statements
 
-statements          <- _* (expr exprs:(expr_end _* expr)*)? _*
+statements          <- _* (expr exprs:(expr_end _* expr)*)? _*  %make_statements
 
 expr_end            <- _* ";" / "\n"
 
@@ -14,7 +14,7 @@ function_expr       <- "function" _* "(" function_args? ")" _* "{" statements "}
 
 function_args       <- _* name _* ("," _* name _*)*
 
-call_expr           <- name arg:("(" args:call_args? ")" / " "+ expr)?
+call_expr           <- name arg:("(" args:call_args? ")" / " "+ expr)?  %make_call
 
 call_args           <- _* expr _* exprs:("," _* expr _*)*
 
