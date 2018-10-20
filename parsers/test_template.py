@@ -32,3 +32,8 @@ def test_calls():
     assert call.subject == 'blah'
     inner_call = call.args[0].elements[1].elements[0]
     assert inner_call.subject == 'Z'
+
+
+# def test_strange():
+#     e = parse('[if (a) {]123[}]')
+#     utils.inspect(e)

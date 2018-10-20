@@ -5,8 +5,6 @@ from .press_lang import Actions as Base
 class Template:
     def __init__(self, parts):
         self.elements = parts
-        self.offset = 0
-        self.text = 'Template'
 
 
 class Actions(Base):
@@ -20,8 +18,7 @@ class Actions(Base):
         parts.append(elements[0].text)
         if elements[1].elements:
             for el in elements[1].elements:
-                if el.insertion.statements.text:
-                    parts.append(el.insertion.statements)
+                parts.append(el.insertion.statements)
                 if el.elements[1].text:
                     parts.append(el.elements[1].text)
         return Template(parts)

@@ -4,8 +4,10 @@ import reportlab.lib.pagesizes
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-from cmd import Command
+from runtime import Runtime
 from parsers import press_lang, template
+from parsers.ast import press_lang as press_lang_ast
+from parsers.ast import template as template_ast
 
 
 class Document:
@@ -34,15 +36,20 @@ class Document:
         )
 
     def init(self, intro):
-        self.intro = intro
-        press_lang.parse(intro)
+        self.runtime = Runtime()
+        self.intro = intro.strip()
+        self.intro_code = press_lang.parse(
+            self.intro,
+            actions=press_lang_ast.Actions
+        )
+        self.intro_code.execute(self, None)
 
     def parse(self, text):
-        return template.parse(text)
+        return template.parse(text.strip(), actions=template_ast.Actions)
 
     def transform(self, ast):
-        print(ast)
-        return ast
+        print(ast.elements)
+        return ast.elements
 
     def set_text_origin(self, text):
         text.setTextOrigin(
@@ -78,8 +85,8 @@ class Document:
                     )
                     text = self.canvas.beginText()
                     first_line = True
-            if isinstance(item, Command):
-                item.apply(self, text)
+            if isinstance(item, press_lang_ast.Statements):
+                item.execute(self, text)
 
         if text:
             self.canvas.drawText(text)

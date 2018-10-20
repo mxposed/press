@@ -19,9 +19,10 @@ def test_strings():
 
 def test_functions():
     e = parse('function(){}')
-    assert e.elements[0].text == 'function(){}'
+    assert len(e.elements[0].args) == 0
+    assert len(e.elements[0].code.elements) == 0
     e = parse('function(a){}')
-    assert e.elements[0].elements[3].name == 'a'
+    assert e.elements[0].args[0] == 'a'
 
 
 def test_calls():
@@ -69,3 +70,9 @@ def test_values():
     assert e.elements[0] is False
     e = parse('null')
     assert e.elements[0] is None
+
+
+def test_assignments():
+    e = parse('a = 1')
+    assert e.elements[0].subject == 'a'
+    assert e.elements[0].expr.value == '1'

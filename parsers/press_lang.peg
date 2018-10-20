@@ -8,9 +8,9 @@ expr_end            <- _* ";" / "\n"
 
 expr                <- value / assignment_expr / function_expr / call_expr
 
-assignment_expr     <- name _* "=" _* expr
+assignment_expr     <- name _* "=" _* expr  %make_assignment
 
-function_expr       <- "function" _* "(" function_args? ")" _* "{" statements "}"
+function_expr       <- "function" _* "(" function_args? ")" _* "{" statements "}"  %make_function
 
 function_args       <- _* name _* ("," _* name _*)*
 
