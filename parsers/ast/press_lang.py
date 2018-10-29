@@ -1,3 +1,4 @@
+from runtime import Runtime
 
 
 class String:
@@ -21,11 +22,41 @@ class Call:
         self.subject = subject
         self.args = args
 
-    def execute(self, doc, text):
-        if self.subject in doc.runtime.defs:
-            doc.runtime.defs[self.subject](doc, text, *self.args)
+    def execute(self, runtime: Runtime):
+        if runtime.has(self.subject):
+            subject = runtime.get(self.subject)
+            args = self.prepare_args(runtime)
+            if callable(subject):
+                return subject(runtime, *args)
+            elif hasattr(subject, 'execute'):
+                return subject.execute(runtime, *args)
+            else:
+                return subject
         else:
             raise ValueError('Function {} not found'.format(self.subject))
+
+    def prepare_args(self, runtime):
+        result = []
+        for arg in self.args:
+            if isinstance(arg, Number):
+                if '.' in arg.value:
+                    result.append(float(arg.value))
+                else:
+                    result.append(int(arg.value))
+            elif isinstance(arg, String):
+                result.append(eval(arg.value))
+            elif hasattr(arg, 'execute'):
+                if hasattr(arg, 'lazy'):
+                    if arg.lazy:
+                        arg.lazy = False
+                        result.append(arg)
+                    else:
+                        result.append(arg.execute(runtime))
+                else:
+                    result.append(arg.execute(runtime))
+            else:
+                result.append(arg)
+        return result
 
 
 class Assignment:
@@ -33,8 +64,11 @@ class Assignment:
         self.subject = subject
         self.expr = expr
 
-    def execute(self, doc, text):
-        doc.runtime.defs[self.subject] = self.expr
+    def execute(self, runtime):
+        expr = self.expr
+        if hasattr(expr, 'execute') and not isinstance(self.expr, Function):
+            expr = expr.execute(runtime)
+        runtime.set(self.subject, expr)
 
 
 class Function:
@@ -42,22 +76,22 @@ class Function:
         self.args = args
         self.code = code
 
-    def __call__(self, doc, text, *args):
+    def execute(self, runtime, *args):
+        runtime.push()
         for i, arg in enumerate(args):
-            doc.runtime.defs[self.args[i]] = arg
-        self.code.execute(doc, text)
-        for i, _ in enumerate(args):
-            del doc.runtime.defs[self.args[i]]
+            runtime.set(self.args[i], arg)
+        self.code.execute(runtime)
+        runtime.pop()
 
 
 class Statements:
     def __init__(self, exprs):
         self.elements = exprs
 
-    def execute(self, doc, text):
+    def execute(self, runtime):
         for expr in self.elements:
             if hasattr(expr, 'execute'):
-                expr.execute(doc, text)
+                expr.execute(runtime)
 
 
 class Actions:
