@@ -54,38 +54,28 @@ class Document:
         items = self.parse(text).execute(self.runtime)
         print(items)
 
-        self.canvas.rect(
-            self.margins[0],
-            self.margins[1],
-            self.page_size[0] - 2 * self.margins[0],
-            self.page_size[1] - 2 * self.margins[1]
-        )
-
         txt = self.canvas.beginText()
         first_line = True
         for item in items:
-            item.apply(txt)
-            if first_line:
-                item.set_text_origin(txt)
-                first_line = False
-            if isinstance(item, TextLine):
-                txt.textLine(item.text)
-            else:
-                if item.text.endswith('\n'):
-                    txt.textLine(item.text[:-1])
-                else:
-                    txt.textOut(item.text)
+            item.apply(txt, runtime=self.runtime)
 
-            if txt.getY() < self.margins[1]:
-                self.canvas.drawText(txt)
-                self.canvas.showPage()
-                self.canvas.setFont(
-                    self.font,
-                    self.font_size,
-                    self.font_size * self.leading
-                )
-                txt = self.canvas.beginText()
-                first_line = True
+            for line in item.lines():
+                if first_line:
+                    item.set_text_origin(txt)
+                first_line = False
+                item.text_line(txt, line)
+
+                if txt.getY() < self.margins[1]:
+                    self.canvas.drawText(txt)
+                    self.canvas.showPage()
+                    self.canvas.setFont(
+                        self.font,
+                        self.font_size,
+                        self.font_size * self.leading
+                    )
+                    txt = self.canvas.beginText()
+                    item.apply(txt, text_only=True, runtime=self.runtime)
+                    first_line = True
 
         if txt:
             self.canvas.drawText(txt)

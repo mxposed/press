@@ -14,7 +14,8 @@ class Template:
         for element in self.elements:
             if type(element) == str:
                 if element[0] == '\n':
-                    runtime.add_text(element[1:])
+                    if element[1:]:
+                        runtime.add_text(element[1:])
                 elif element:
                     runtime.add_text(element)
             else:

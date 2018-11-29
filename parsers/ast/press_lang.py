@@ -35,27 +35,38 @@ class Call:
         else:
             raise ValueError('Function {} not found'.format(self.subject))
 
+    def prepare_arg(self, runtime, arg):
+        if isinstance(arg, Number):
+            if '.' in arg.value:
+                return float(arg.value)
+            else:
+                return int(arg.value)
+        elif isinstance(arg, String):
+            return eval(arg.value)
+        elif isinstance(arg, List):
+            return list(map(lambda el: self.prepare_arg(runtime, el), arg.elements))
+        elif isinstance(arg, Object):
+            pairs = []
+            for pair in arg.elements:
+                pairs.append((self.prepare_arg(runtime, pair.key),
+                              self.prepare_arg(runtime, pair.value)))
+            return dict(pairs)
+        elif hasattr(arg, 'execute'):
+            if hasattr(arg, 'lazy'):
+                if arg.lazy:
+                    arg.lazy = False
+                    return arg
+                else:
+                    return arg.execute(runtime)
+            else:
+                return arg.execute(runtime)
+        else:
+            return arg
+
     def prepare_args(self, runtime):
         result = []
         for arg in self.args:
-            if isinstance(arg, Number):
-                if '.' in arg.value:
-                    result.append(float(arg.value))
-                else:
-                    result.append(int(arg.value))
-            elif isinstance(arg, String):
-                result.append(eval(arg.value))
-            elif hasattr(arg, 'execute'):
-                if hasattr(arg, 'lazy'):
-                    if arg.lazy:
-                        arg.lazy = False
-                        result.append(arg)
-                    else:
-                        result.append(arg.execute(runtime))
-                else:
-                    result.append(arg.execute(runtime))
-            else:
-                result.append(arg)
+            result.append(self.prepare_arg(runtime, arg))
         return result
 
 
@@ -92,6 +103,24 @@ class Statements:
         for expr in self.elements:
             if hasattr(expr, 'execute'):
                 expr.execute(runtime)
+
+
+class List:
+    def __init__(self, elements):
+        self.elements = elements
+
+
+class Object:
+    def __init__(self, elements=None):
+        if elements is None:
+            elements = []
+        self.elements = elements
+
+
+class Pair:
+    def __init__(self, key, value) -> None:
+        self.key = key
+        self.value = value
 
 
 class Actions:
@@ -132,13 +161,13 @@ class Actions:
         args = []
         if hasattr(elements[1], 'args'):
             call_args = elements[1].args
-            if hasattr(call_args, 'expr'):
-                args.append(elements[1].args.expr)
+            if hasattr(call_args, 'basic_expr'):
+                args.append(elements[1].args.basic_expr)
             if hasattr(call_args, 'exprs') and call_args.exprs.elements:
                 for arg in call_args.exprs.elements:
-                    args.append(arg.expr)
-        elif hasattr(elements[1], 'expr'):
-            args.append(elements[1].expr)
+                    args.append(arg.basic_expr)
+        elif hasattr(elements[1], 'basic_expr'):
+            args.append(elements[1].basic_expr)
         elif elements[1].elements and hasattr(elements[1].elements[0],
                                               'inner_template'):
             for template in elements[1].elements:
@@ -159,3 +188,25 @@ class Actions:
                 for el in elements[3].elements[3]:
                     args.append(el.elements[2])
         return Function(args, code)
+
+    @staticmethod
+    def make_list(input, start, end, elements):
+        els = [elements[2]]
+        if elements[4].elements:
+            for el in elements[4].elements:
+                els.append(el.elements[2])
+        return List(els)
+
+    @staticmethod
+    def make_object(input, start, end, elements):
+        if len(elements) < 4:
+            return Object()
+        pairs = [elements[2]]
+        if elements[4].elements:
+            for el in elements[4].elements:
+                pairs.append(el.elements[2])
+        return Object(pairs)
+
+    @staticmethod
+    def make_pair(input, start, end, elements):
+        return Pair(elements[0], elements[4])

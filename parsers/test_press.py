@@ -76,3 +76,26 @@ def test_assignments():
     e = parse('a = 1')
     assert e.elements[0].subject == 'a'
     assert e.elements[0].expr.value == '1'
+
+
+def test_lists():
+    e = parse('(1)')
+    assert len(e.elements[0].elements) == 1
+    assert e.elements[0].elements[0].value == '1'
+    e = parse('(1, 2)')
+    assert len(e.elements[0].elements) == 2
+    assert e.elements[0].elements[0].value == '1'
+    assert e.elements[0].elements[1].value == '2'
+
+
+def test_objects():
+    e = parse('{1=2}')
+    assert len(e.elements[0].elements) == 1
+    assert e.elements[0].elements[0].key.value == '1'
+    assert e.elements[0].elements[0].value.value == '2'
+    e = parse('{a=1, b=2}')
+    assert len(e.elements[0].elements) == 2
+    assert e.elements[0].elements[0].key.subject == 'a'
+    assert e.elements[0].elements[0].value.value == '1'
+    assert e.elements[0].elements[1].key.subject == 'b'
+    assert e.elements[0].elements[1].value.value == '2'
