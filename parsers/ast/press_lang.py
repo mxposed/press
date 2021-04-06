@@ -1,13 +1,83 @@
-from runtime import Runtime
+from runtime import Runtime, NameResolutionError
 
 
-class String:
-    def __init__(self, value):
+def prepare_arg(caller, runtime, arg):
+    if isinstance(arg, Number):
+        if '.' in arg.value:
+            return float(arg.value)
+        else:
+            return int(arg.value)
+    elif isinstance(arg, String):
+        return eval(arg.value)
+    elif isinstance(arg, List):
+        return list(map(lambda el: prepare_arg(caller, runtime, el), arg.elements))
+    elif isinstance(arg, Object):
+        pairs = []
+        for pair in arg.elements:
+            pairs.append((prepare_arg(caller, runtime, pair.key),
+                          prepare_arg(caller, runtime, pair.value)))
+        return dict(pairs)
+    elif hasattr(arg, 'execute'):
+        if hasattr(arg, 'lazy'):
+            if arg.lazy:
+                arg.lazy = False
+                return arg
+            else:
+                return arg.execute(runtime, caller=caller)
+        else:
+            return arg.execute(runtime, caller=caller)
+    else:
+        return arg
+
+
+class Node:
+    child_attr = 'elements'
+
+    def __init__(self, *args, start=None, end=None) -> None:
+        super().__init__()
+        self.start = start
+        self.end = end
+        self.caller = None
+        self.parent = None
+        self.root = None
+        self.prefix = None
+
+    def set_parent(self, parent):
+        if parent is not None:
+            root = parent.root
+        else:
+            root = self
+        if self.parent is None:
+            self.parent = parent
+            self.root = root
+
+        if self.has_children():
+            for child in self.children():
+                if isinstance(child, Node):
+                    child.set_parent(self)
+
+    def has_children(self):
+        return hasattr(self, self.__class__.child_attr)
+
+    def children(self):
+        return getattr(self, self.__class__.child_attr)
+
+    @property
+    def prefix_lines(self):
+        if self.prefix is None:
+            return 0
+        return self.prefix.count('\n')
+
+
+class String(Node):
+    def __init__(self, value, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.value = value
 
 
-class Number:
-    def __init__(self, value):
+class Number(Node):
+    def __init__(self, value, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.value = value
 
     def __str__(self):
@@ -17,110 +87,119 @@ class Number:
         return '<Number: {}>'.format(self.value)
 
 
-class Call:
-    def __init__(self, subject, args):
+class Call(Node):
+    def __init__(self, subject, args, *pargs, **kwargs):
+        super().__init__(*pargs, **kwargs)
         self.subject = subject
         self.args = args
 
-    def execute(self, runtime: Runtime):
+    def execute(self, runtime: Runtime, caller: Node = None):
+        self.caller = caller
+
         if runtime.has(self.subject):
             subject = runtime.get(self.subject)
             args = self.prepare_args(runtime)
             if callable(subject):
-                return subject(runtime, *args)
+                return subject(runtime, *args, caller=self)
             elif hasattr(subject, 'execute'):
-                return subject.execute(runtime, *args)
+                return subject.execute(runtime, *args, caller=self)
             else:
                 return subject
         else:
-            raise ValueError('Function {} not found'.format(self.subject))
-
-    def prepare_arg(self, runtime, arg):
-        if isinstance(arg, Number):
-            if '.' in arg.value:
-                return float(arg.value)
-            else:
-                return int(arg.value)
-        elif isinstance(arg, String):
-            return eval(arg.value)
-        elif isinstance(arg, List):
-            return list(map(lambda el: self.prepare_arg(runtime, el), arg.elements))
-        elif isinstance(arg, Object):
-            pairs = []
-            for pair in arg.elements:
-                pairs.append((self.prepare_arg(runtime, pair.key),
-                              self.prepare_arg(runtime, pair.value)))
-            return dict(pairs)
-        elif hasattr(arg, 'execute'):
-            if hasattr(arg, 'lazy'):
-                if arg.lazy:
-                    arg.lazy = False
-                    return arg
-                else:
-                    return arg.execute(runtime)
-            else:
-                return arg.execute(runtime)
-        else:
-            return arg
+            raise NameResolutionError(self.subject, node=self)
 
     def prepare_args(self, runtime):
         result = []
         for arg in self.args:
-            result.append(self.prepare_arg(runtime, arg))
+            result.append(prepare_arg(self, runtime, arg))
         return result
 
+    def has_children(self):
+        return True
 
-class Assignment:
-    def __init__(self, subject, expr):
+    def children(self):
+        return self.args + [self.subject]
+
+
+class Assignment(Node):
+    def __init__(self, subject, expr, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.subject = subject
         self.expr = expr
 
-    def execute(self, runtime):
+    def execute(self, runtime, caller: Node = None):
+        self.caller = caller
+
         expr = self.expr
         if hasattr(expr, 'execute') and not isinstance(self.expr, Function):
-            expr = expr.execute(runtime)
+            expr = expr.execute(runtime, caller=self)
         runtime.set(self.subject, expr)
 
+    def has_children(self):
+        return True
 
-class Function:
-    def __init__(self, args, code):
+    def children(self):
+        return [self.subject, self.expr]
+
+
+class Function(Node):
+    def __init__(self, args, code, *pargs, **kwargs):
+        super().__init__(*pargs, **kwargs)
         self.args = args
         self.code = code
 
-    def execute(self, runtime, *args):
+    def execute(self, runtime, *args, caller: Node = None):
+        self.caller = caller
+
         runtime.push()
         for i, arg in enumerate(args):
             runtime.set(self.args[i], arg)
-        self.code.execute(runtime)
+        self.code.execute(runtime, caller=self)
         runtime.pop()
 
+    def has_children(self):
+        return True
 
-class Statements:
-    def __init__(self, exprs):
+    def children(self):
+        return self.args + [self.code]
+
+
+class Statements(Node):
+    def __init__(self, exprs, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.elements = exprs
 
-    def execute(self, runtime):
+    def execute(self, runtime, caller: Node = None):
+        self.caller = caller
+
         for expr in self.elements:
             if hasattr(expr, 'execute'):
-                expr.execute(runtime)
+                expr.execute(runtime, caller=self)
 
 
-class List:
-    def __init__(self, elements):
+class List(Node):
+    def __init__(self, elements, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.elements = elements
 
 
-class Object:
-    def __init__(self, elements=None):
-        if elements is None:
-            elements = []
+class Object(Node):
+    def __init__(self, elements, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.elements = elements
 
 
-class Pair:
-    def __init__(self, key, value) -> None:
+class Pair(Node):
+    def __init__(self, key, value, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.key = key
         self.value = value
+
+    def has_children(self):
+        return True
+
+    def children(self):
+        return [self.key, self.value]
 
 
 class Actions:
@@ -134,11 +213,11 @@ class Actions:
 
     @staticmethod
     def make_number(input, start, end, elements):
-        return Number(input[start:end])
+        return Number(input[start:end], start=start, end=end)
 
     @staticmethod
     def make_string(input, start, end, elements):
-        return String(input[start:end])
+        return String(input[start:end], start=start, end=end)
 
     @staticmethod
     def make_boolean(input, start, end):
@@ -154,7 +233,7 @@ class Actions:
         if hasattr(elements[1], 'exprs'):
             for el in elements[1].exprs:
                 exprs.append(el.expr)
-        return Statements(exprs)
+        return Statements(exprs, start=start, end=end)
 
     @staticmethod
     def make_call(input, start, end, elements):
@@ -172,11 +251,11 @@ class Actions:
                                               'inner_template'):
             for template in elements[1].elements:
                 args.append(template.inner_template)
-        return Call(elements[0], args)
+        return Call(elements[0], args, start=start, end=end)
 
     @staticmethod
     def make_assignment(input, start, end, elements):
-        return Assignment(elements[0], elements[4])
+        return Assignment(elements[0], elements[4], start=start, end=end)
 
     @staticmethod
     def make_function(input, start, end, elements):
@@ -187,7 +266,7 @@ class Actions:
             if len(elements[3].elements) > 3:
                 for el in elements[3].elements[3]:
                     args.append(el.elements[2])
-        return Function(args, code)
+        return Function(args, code, start=start, end=end)
 
     @staticmethod
     def make_list(input, start, end, elements):
@@ -195,18 +274,18 @@ class Actions:
         if elements[4].elements:
             for el in elements[4].elements:
                 els.append(el.elements[2])
-        return List(els)
+        return List(els, start=start, end=end)
 
     @staticmethod
     def make_object(input, start, end, elements):
         if len(elements) < 4:
-            return Object()
+            return Object([])
         pairs = [elements[2]]
         if elements[4].elements:
             for el in elements[4].elements:
                 pairs.append(el.elements[2])
-        return Object(pairs)
+        return Object(pairs, start=start, end=end)
 
     @staticmethod
     def make_pair(input, start, end, elements):
-        return Pair(elements[0], elements[4])
+        return Pair(elements[0], elements[4], start=start, end=end)

@@ -1,17 +1,21 @@
+import os
+
 from reportlab.lib.units import cm
 from reportlab.pdfgen.canvas import Canvas
 import reportlab.lib.pagesizes
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-from runtime import Runtime, TextLine
+from runtime import Runtime
 from parsers import press_lang, template
 from parsers.ast import press_lang as press_lang_ast
 from parsers.ast import template as template_ast
 
 
 class Document:
-    def __init__(self, fname):
+    def __init__(self, file):
+        self.file = file
+
         self.font = 'Tahoma'
         self.font_size = 12
         self.page_size_name = 'A4'
@@ -24,9 +28,10 @@ class Document:
         self.intro = None
         self.intro_code = None
 
-        self.init_canvas(fname)
+        self.init_canvas(file)
 
     def init_canvas(self, fname):
+        fname = os.path.splitext(fname)[0]
         self.canvas = Canvas(
             '{}.pdf'.format(fname),
             pagesize=self.page_size
@@ -37,6 +42,11 @@ class Document:
             self.font_size,
             self.font_size * self.leading
         )
+        self.canvas.setCreator("press")
+        self.canvas.setProducer("")
+        self.canvas.setAuthor("")
+        self.canvas.setTitle("")
+        self.canvas.setSubject("")
 
     def init(self, intro):
         self.runtime = Runtime()
@@ -45,10 +55,18 @@ class Document:
             self.intro,
             actions=press_lang_ast.Actions
         )
+        self.intro_code.file = os.path.abspath(self.file)
+        self.intro_code.text = self.intro
+        self.intro_code.set_parent(None)
         self.intro_code.execute(self.runtime)
 
     def parse(self, text):
-        return template.parse(text.strip(), actions=template_ast.Actions)
+        root = template.parse(text.strip(), actions=template_ast.Actions)
+        root.prefix = self.intro + '\n--------\n'
+        root.file = os.path.abspath(self.file)
+        root.text = text.strip()
+        root.set_parent(None)
+        return root
 
     def render(self, text):
         items = self.parse(text).execute(self.runtime)
@@ -59,11 +77,13 @@ class Document:
         for item in items:
             item.apply(txt, runtime=self.runtime)
 
-            for line in item.lines():
+            lines = item.lines()
+            for idx, line in enumerate(lines):
                 if first_line:
                     item.set_text_origin(txt)
                 first_line = False
-                item.text_line(txt, line)
+                # print(repr((line, idx)))
+                item.text_line(txt, line, final=idx == len(lines) - 1)
 
                 if txt.getY() < self.margins[1]:
                     self.canvas.drawText(txt)

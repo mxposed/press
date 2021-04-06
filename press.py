@@ -1,18 +1,23 @@
 import re
-import os
 import sys
 
 from doc import Document
+from runtime import PressError
 
 
 def main(file):
-    fname = os.path.splitext(file)[0]
-    doc = Document(fname)
+    doc = Document(file)
     input = open(file).read()
     border = re.compile('^-{20,}$', re.MULTILINE)
-    intro, text = re.split(border, input, 1)
+    if re.search(border, input):
+        intro, text = re.split(border, input, 1)
+    else:
+        intro, text = "", input
     doc.init(intro)
-    doc.render(text)
+    try:
+        doc.render(text)
+    except PressError as e:
+        e.report()
     doc.save()
 
 

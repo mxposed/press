@@ -1,25 +1,24 @@
 
-from .press_lang import Actions as Base
+from .press_lang import Actions as Base, Node
 
 
-class Template:
-    def __init__(self, parts):
+class Template(Node):
+    def __init__(self, parts, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.elements = parts
         self.lazy = True
 
-    def execute(self, runtime):
+    def execute(self, runtime, caller: Node = None):
+        self.caller = caller
+
         runtime.push_buffer()
         if not self.elements[0]:
             self.elements = self.elements[1:]
         for element in self.elements:
-            if type(element) == str:
-                if element[0] == '\n':
-                    if element[1:]:
-                        runtime.add_text(element[1:])
-                elif element:
-                    runtime.add_text(element)
+            if type(element) == str and element:
+                runtime.add_text(element)
             else:
-                element.execute(runtime)
+                element.execute(runtime, caller=self)
         return runtime.pop_buffer()
 
 
@@ -36,4 +35,4 @@ class Actions(Base):
                 parts.append(el.insertion.statements)
                 if el.elements[1].text:
                     parts.append(el.elements[1].text)
-        return Template(parts)
+        return Template(parts, start=start, end=end)
