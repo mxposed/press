@@ -12,7 +12,11 @@ from text_fragment import TextLine
 def reportlab_mapping(font: TTFont):
     family_name = font.face.familyName.decode('utf-8')
     full_name = font.face.name.decode('utf-8')
-    style_name = font.face.styleName.decode('utf-8').lower()
+    if type(font.face.styleName) is bytes:
+        style_name = font.face.styleName.decode('utf-8')
+    else:
+        style_name = font.face.styleName
+    style_name = style_name.lower()
     bold = int('bold' in style_name)
     italic = int('italic' in style_name)
     addMapping(family_name, bold, italic, full_name)
@@ -24,17 +28,21 @@ def size(runtime: Runtime, size, leading=None):
 
 
 @register
-def font(runtime, fontname, fontsize, leading=None):
+def font(runtime, fontname, fontsize, leading=None, file=None):
+    if file is None:
+        file = f"{fontname}.ttf"
     if fontname not in pdfmetrics._fonts and not fontname in pdfmetrics.standardFonts:
         try:
-            font = TTFont(fontname, '{}.ttf'.format(fontname))
+            font = TTFont(fontname, file)
         except:
-            font = TTFont(fontname, '{}.ttc'.format(fontname))
+            if file is None:
+                file = f"{fontname}.ttc"
+            font = TTFont(fontname, file)
         pdfmetrics.registerFont(font)
         reportlab_mapping(font)
         if font.face.fileKind == 'TTC':
             for idx, _ in enumerate(font.face.subfontOffsets[1:]):
-                tt_font = TTFont(fontname, '{}.ttc'.format(fontname), subfontIndex=idx + 1)
+                tt_font = TTFont(fontname, file, subfontIndex=idx + 1)
                 tt_font.fontName = tt_font.face.name.decode('utf-8')
                 pdfmetrics.registerFont(tt_font)
                 reportlab_mapping(tt_font)
