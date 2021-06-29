@@ -1,4 +1,4 @@
-from runtime import Runtime, NameResolutionError
+from runtime import Runtime, NameResolutionError, PressError
 
 
 def prepare_arg(caller, runtime, arg):
@@ -100,7 +100,10 @@ class Call(Node):
             subject = runtime.get(self.subject)
             args = self.prepare_args(runtime)
             if callable(subject):
-                return subject(runtime, *args, caller=self)
+                try:
+                    return subject(runtime, *args, caller=self)
+                except Exception as e:
+                    raise PressError(e, node=self)
             elif hasattr(subject, 'execute'):
                 return subject.execute(runtime, *args, caller=self)
             else:
